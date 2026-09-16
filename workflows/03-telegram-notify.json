@@ -1,0 +1,175 @@
+{
+  "name": "03 - Telegram Notify",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://export.arxiv.org/api/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search_query",
+              "value": "cat:cs.AI OR cat:cs.LG"
+            },
+            {
+              "name": "sortBy",
+              "value": "submittedDate"
+            },
+            {
+              "name": "sortOrder",
+              "value": "descending"
+            },
+            {
+              "name": "max_results",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        288,
+        -160
+      ],
+      "id": "aebf1407-fbd0-446b-99c0-6bb37fab84d0",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── n8n Code 節點：arXiv Atom XML → 結構化 items（含 LaTeX 清理）──\n// 模式：Run Once for All Items ｜ 語言：JavaScript\n// 上游：HTTP Request 節點（arXiv API，Response Format = Text）\n\n// ── 1. 取出 arXiv 回應的原始 XML 字串（相容不同輸出欄位）──\nconst j = $input.first().json;\nlet xml = typeof j === 'string' ? j\n  : (typeof j.data === 'string' ? j.data\n  : (typeof j.body === 'string' ? j.body : JSON.stringify(j)));\n\n// ── 2. 切出每一筆 <entry>（arXiv 的 Atom XML 每篇論文一個 entry）──\nconst raw = xml.split('<entry>').slice(1); // 第 0 段是 feed 標頭，丟掉\n\n// ── 3. 抓 tag 內容 + 去標籤 + 解 HTML entity ──\nfunction pick(block, tag) {\n  const m = block.match(new RegExp('<' + tag + '[^>]*>([\\\\s\\\\S]*?)<\\\\/' + tag + '>'));\n  if (!m) return '';\n  return m[1]\n    .replace(/<[^>]+>/g, ' ')      // 去掉巢狀 tag（如作者標籤）\n    .replace(/\\s+/g, ' ')          // 多空白 → 單空白（XML 常跨行）\n    .trim()\n    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\");\n}\n\n// ── 4. 清理 LaTeX 數學式（arXiv 摘要原始內容是 LaTeX 源碼）──\nfunction cleanLatex(s) {\n  if (!s) return '';\n  return s\n    // 常見 LaTeX 命令 → Unicode 符號\n    .replace(/\\\\mid/g, '|')\n    .replace(/\\\\times/g, '×')\n    .replace(/\\\\cdot/g, '·')\n    .replace(/\\\\leq|\\\\le/g, '≤')\n    .replace(/\\\\geq|\\\\ge/g, '≥')\n    .replace(/\\\\approx/g, '≈')\n    .replace(/\\\\pm/g, '±')\n    .replace(/\\\\rightarrow|\\\\to/g, '→')\n    .replace(/\\\\ldots|\\\\dots/g, '…')\n    .replace(/\\\\alpha/g, 'α').replace(/\\\\beta/g, 'β').replace(/\\\\gamma/g, 'γ')\n    .replace(/\\\\delta/g, 'δ').replace(/\\\\theta/g, 'θ').replace(/\\\\lambda/g, 'λ')\n    .replace(/\\\\mu/g, 'μ').replace(/\\\\sigma/g, 'σ').replace(/\\\\pi/g, 'π')\n    // 排版指令 \\mathrm{...} / \\text{...} 等 → 只留內容\n    .replace(/\\\\(?:mathrm|text|mathbf|mathit|mathbb|mathcal|operatorname)\\{([^{}]*)\\}/g, '$1')\n    // 上標 ^{...} → ^x；下標 _{...} → _x\n    .replace(/\\^\\{([^{}]*)\\}/g, '^$1')\n    .replace(/_\\{([^{}]*)\\}/g, '_$1')\n    // 移除殘留：$ 符號、剩下的 \\命令\n    .replace(/\\$/g, '')\n    .replace(/\\\\[a-zA-Z]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// ── 5. 輸出 items：n8n 節點的回傳格式是 [{ json: {...} }, ...] ──\nreturn raw.map(e => ({\n  json: {\n    title: cleanLatex(pick(e, 'title')),\n    summary: cleanLatex(pick(e, 'summary')),\n    link: pick(e, 'id'),\n    published: pick(e, 'published'),\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -160
+      ],
+      "id": "47d0d99e-af58-47b3-ad47-0fc61acc4943",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        80,
+        -160
+      ],
+      "id": "5c6ba3cb-9020-42af-bd80-8f53fb6caf6a",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 把 20 張論文卡「收斂」成 1 張卡片（內容 = Telegram 訊息本文）──\nconst items = $input.all();\n\n// 每篇組一行：編號 + 標題 + 連結\nconst lines = items.map((it, i) => {\n  const d = it.json;\n  return (i + 1) + '. ' + d.title + '\\n' + d.link;\n});\n\n// 日期（用台灣時區）\nconst today = new Date().toLocaleDateString('zh-TW', {\n  timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'\n});\n\n// 組出完整訊息\nconst message = '🤖 每日 AI 情報 · ' + today + '（共 ' + items.length + ' 篇）\\n\\n'\n  + lines.join('\\n\\n');\n\n// 只回傳 1 張卡：{ message: \"...\", count: 20 }\nreturn [{ json: { message: message, count: items.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        -160
+      ],
+      "id": "14173494-af9c-4049-8d4d-16df3bf70381",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "chatId": "8805343990",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        -160
+      ],
+      "id": "8dec18b4-1eba-42f7-a1f5-703258632c0e",
+      "name": "Send a text message",
+      "webhookId": "b81345d4-bb79-4c64-b64d-b36cf5168de4",
+      "credentials": {
+        "telegramApi": {
+          "id": "0BWIojDDa9gPLuUA",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f9750936-c657-4a7b-b326-f45fb936718c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fab04b8b26d16d1175a5a6e6a69d17860baf854b902b3031204f0013e8201e2a"
+  },
+  "nodeGroups": [],
+  "id": "71EBiIPkh7gBZoJt",
+  "tags": []
+}
