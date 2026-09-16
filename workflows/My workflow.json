@@ -14,26 +14,57 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
+        "url": "https://export.arxiv.org/api/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
             {
-              "id": "e4914db7-2b4c-4413-9916-5e5924b6a789",
-              "name": "Andrew",
-              "value": "",
-              "type": "string"
+              "name": "search_query",
+              "value": "cat:cs.AI OR cat:cs.LG"
+            },
+            {
+              "name": "sortBy",
+              "value": "submittedDate"
+            },
+            {
+              "name": "sortOrder",
+              "value": "descending"
+            },
+            {
+              "name": "max_results",
+              "value": "20"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
       },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
       "position": [
         224,
         0
       ],
-      "id": "d7f8f20d-527d-4797-b488-ba41bfcda4fd",
-      "name": "Edit Fields"
+      "id": "aebf1407-fbd0-446b-99c0-6bb37fab84d0",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── n8n Code 節點：arXiv Atom XML → 結構化 items（含 LaTeX 清理）──\n// 模式：Run Once for All Items ｜ 語言：JavaScript\n// 上游：HTTP Request 節點（arXiv API，Response Format = Text）\n\n// ── 1. 取出 arXiv 回應的原始 XML 字串（相容不同輸出欄位）──\nconst j = $input.first().json;\nlet xml = typeof j === 'string' ? j\n  : (typeof j.data === 'string' ? j.data\n  : (typeof j.body === 'string' ? j.body : JSON.stringify(j)));\n\n// ── 2. 切出每一筆 <entry>（arXiv 的 Atom XML 每篇論文一個 entry）──\nconst raw = xml.split('<entry>').slice(1); // 第 0 段是 feed 標頭，丟掉\n\n// ── 3. 抓 tag 內容 + 去標籤 + 解 HTML entity ──\nfunction pick(block, tag) {\n  const m = block.match(new RegExp('<' + tag + '[^>]*>([\\\\s\\\\S]*?)<\\\\/' + tag + '>'));\n  if (!m) return '';\n  return m[1]\n    .replace(/<[^>]+>/g, ' ')      // 去掉巢狀 tag（如作者標籤）\n    .replace(/\\s+/g, ' ')          // 多空白 → 單空白（XML 常跨行）\n    .trim()\n    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\");\n}\n\n// ── 4. 清理 LaTeX 數學式（arXiv 摘要原始內容是 LaTeX 源碼）──\nfunction cleanLatex(s) {\n  if (!s) return '';\n  return s\n    // 常見 LaTeX 命令 → Unicode 符號\n    .replace(/\\\\mid/g, '|')\n    .replace(/\\\\times/g, '×')\n    .replace(/\\\\cdot/g, '·')\n    .replace(/\\\\leq|\\\\le/g, '≤')\n    .replace(/\\\\geq|\\\\ge/g, '≥')\n    .replace(/\\\\approx/g, '≈')\n    .replace(/\\\\pm/g, '±')\n    .replace(/\\\\rightarrow|\\\\to/g, '→')\n    .replace(/\\\\ldots|\\\\dots/g, '…')\n    .replace(/\\\\alpha/g, 'α').replace(/\\\\beta/g, 'β').replace(/\\\\gamma/g, 'γ')\n    .replace(/\\\\delta/g, 'δ').replace(/\\\\theta/g, 'θ').replace(/\\\\lambda/g, 'λ')\n    .replace(/\\\\mu/g, 'μ').replace(/\\\\sigma/g, 'σ').replace(/\\\\pi/g, 'π')\n    // 排版指令 \\mathrm{...} / \\text{...} 等 → 只留內容\n    .replace(/\\\\(?:mathrm|text|mathbf|mathit|mathbb|mathcal|operatorname)\\{([^{}]*)\\}/g, '$1')\n    // 上標 ^{...} → ^x；下標 _{...} → _x\n    .replace(/\\^\\{([^{}]*)\\}/g, '^$1')\n    .replace(/_\\{([^{}]*)\\}/g, '_$1')\n    // 移除殘留：$ 符號、剩下的 \\命令\n    .replace(/\\$/g, '')\n    .replace(/\\\\[a-zA-Z]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// ── 5. 輸出 items：n8n 節點的回傳格式是 [{ json: {...} }, ...] ──\nreturn raw.map(e => ({\n  json: {\n    title: cleanLatex(pick(e, 'title')),\n    summary: cleanLatex(pick(e, 'summary')),\n    link: pick(e, 'id'),\n    published: pick(e, 'published'),\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "47d0d99e-af58-47b3-ad47-0fc61acc4943",
+      "name": "Code in JavaScript"
     }
   ],
   "pinData": {},
@@ -42,7 +73,18 @@
       "main": [
         [
           {
-            "node": "Edit Fields",
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
             "type": "main",
             "index": 0
           }
@@ -55,7 +97,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "b5de5d9e-a8f8-4129-bde0-5c89fb3fa491",
+  "versionId": "a7f761dd-4654-4a9f-9038-52ef71b55abc",
   "meta": {
     "instanceId": "fab04b8b26d16d1175a5a6e6a69d17860baf854b902b3031204f0013e8201e2a"
   },
