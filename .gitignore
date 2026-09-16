@@ -1,0 +1,10 @@
+# 環境變數（含憑證，絕不進 git）
+.env
+
+# n8n 執行資料（若日後改用 bind mount 會出現在此）
+n8n_data/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

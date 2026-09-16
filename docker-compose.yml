@@ -1,0 +1,32 @@
+# n8n 每日 AI 情報官 — 自架環境（M1）
+#
+# 為什麼用 Docker Compose 而不是 docker run？
+#   ① 設定檔化：環境變數 / volume / port 都寫在檔案裡 → 可版控、可重現
+#   ② 之後要加服務（M6 的 PostgreSQL 去重）只要多一個 service 區塊
+#   ③ 一條指令起停：docker compose up -d  /  docker compose down
+
+services:
+  n8n:
+    # 官方 primary registry；若拉不到可改用 Docker Hub 的 n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"                      # 本機 5678 → 容器 5678（n8n 預設埠）
+    environment:
+      # ⚠️ 時區是 M3 排程的關鍵：時區錯了，排程觸發時間就會錯
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Asia/Taipei}
+      - TZ=${TZ:-Asia/Taipei}
+      # localhost 走 http 時，避免 secure cookie 被瀏覽器拒收
+      - N8N_SECURE_COOKIE=false
+      # 新版 n8n 建議開啟（任務在獨立 runner 執行）
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      # 持久化：workflows / credentials / 執行紀錄都存這裡
+      # （沒有這個 volume，重啟容器一切歸零 — 這是自架最常見的坑）
+      - n8n_data:/home/node/.n8n
+      # 匯出目錄：之後把 workflow JSON 放這裡 → 進 git 版控
+      - ./workflows:/workflows
+
+volumes:
+  n8n_data:
