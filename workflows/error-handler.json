@@ -1,0 +1,91 @@
+{
+  "name": "Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        -64
+      ],
+      "id": "4d7c8612-aa36-4cdc-8e1c-1b37f9074a37",
+      "name": "Error Handler"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 把 n8n 的錯誤資訊整理成人看得懂的告警 ──\nconst e = $input.first().json;\n\nconst wf = (e.workflow && e.workflow.name) || '未知工作流';\nconst ex = e.execution || {};\nconst errMsg = (ex.error && ex.error.message) || '未知錯誤';\n\nconst time = new Date().toLocaleString('zh-TW', {\n  timeZone: 'Asia/Taipei', hour12: false\n});\n\nconst message = '🚨 n8n 工作流失敗告警\\n\\n'\n  + '工作流：' + wf + '\\n'\n  + '失敗節點：' + (ex.lastNodeExecuted || '?') + '\\n'\n  + '錯誤訊息：' + String(errMsg).slice(0, 300) + '\\n'\n  + '時間：' + time + '\\n'\n  + '執行紀錄：' + (ex.url || '(無)');\n\nreturn [{ json: { message: message } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        -64
+      ],
+      "id": "c76eda62-ed1f-485e-bcdf-ad8e33750786",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "8805343990",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        -64
+      ],
+      "id": "0992b4a8-7cf1-48e6-a875-9b685041058d",
+      "name": "Send a text message",
+      "webhookId": "acb885c8-a3bc-4123-a87c-71a5909f2ef1",
+      "credentials": {
+        "telegramApi": {
+          "id": "0BWIojDDa9gPLuUA",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "57aa11ac-f5fd-493e-827d-85ad039d73e7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fab04b8b26d16d1175a5a6e6a69d17860baf854b902b3031204f0013e8201e2a"
+  },
+  "nodeGroups": [],
+  "id": "tNM51C43jYpV3gHy",
+  "tags": []
+}
