@@ -1,0 +1,325 @@
+{
+  "name": "06 - Dedup",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://export.arxiv.org/api/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search_query",
+              "value": "cat:cs.AI OR cat:cs.LG"
+            },
+            {
+              "name": "sortBy",
+              "value": "submittedDate"
+            },
+            {
+              "name": "sortOrder",
+              "value": "descending"
+            },
+            {
+              "name": "max_results",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -160,
+        -496
+      ],
+      "id": "aebf1407-fbd0-446b-99c0-6bb37fab84d0",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -384,
+        -496
+      ],
+      "id": "5c6ba3cb-9020-42af-bd80-8f53fb6caf6a",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "chatId": "8805343990",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1312,
+        -496
+      ],
+      "id": "8dec18b4-1eba-42f7-a1f5-703258632c0e",
+      "name": "Send a text message",
+      "webhookId": "b81345d4-bb79-4c64-b64d-b36cf5168de4",
+      "credentials": {
+        "telegramApi": {
+          "id": "0BWIojDDa9gPLuUA",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── n8n Code 節點：arXiv Atom XML → 結構化 items（含 LaTeX 清理）──\n// 模式：Run Once for All Items ｜ 語言：JavaScript\n// 上游：HTTP Request 節點（arXiv API，Response Format = Text）\n\n// ── 1. 取出 arXiv 回應的原始 XML 字串（相容不同輸出欄位）──\nconst j = $input.first().json;\nlet xml = typeof j === 'string' ? j\n  : (typeof j.data === 'string' ? j.data\n  : (typeof j.body === 'string' ? j.body : JSON.stringify(j)));\n\n// ── 2. 切出每一筆 <entry>（arXiv 的 Atom XML 每篇論文一個 entry）──\nconst raw = xml.split('<entry>').slice(1); // 第 0 段是 feed 標頭，丟掉\n\n// ── 3. 抓 tag 內容 + 去標籤 + 解 HTML entity ──\nfunction pick(block, tag) {\n  const m = block.match(new RegExp('<' + tag + '[^>]*>([\\\\s\\\\S]*?)<\\\\/' + tag + '>'));\n  if (!m) return '';\n  return m[1]\n    .replace(/<[^>]+>/g, ' ')      // 去掉巢狀 tag（如作者標籤）\n    .replace(/\\s+/g, ' ')          // 多空白 → 單空白（XML 常跨行）\n    .trim()\n    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\");\n}\n\n// ── 4. 清理 LaTeX 數學式（arXiv 摘要原始內容是 LaTeX 源碼）──\nfunction cleanLatex(s) {\n  if (!s) return '';\n  return s\n    // 常見 LaTeX 命令 → Unicode 符號\n    .replace(/\\\\mid/g, '|')\n    .replace(/\\\\times/g, '×')\n    .replace(/\\\\cdot/g, '·')\n    .replace(/\\\\leq|\\\\le/g, '≤')\n    .replace(/\\\\geq|\\\\ge/g, '≥')\n    .replace(/\\\\approx/g, '≈')\n    .replace(/\\\\pm/g, '±')\n    .replace(/\\\\rightarrow|\\\\to/g, '→')\n    .replace(/\\\\ldots|\\\\dots/g, '…')\n    .replace(/\\\\alpha/g, 'α').replace(/\\\\beta/g, 'β').replace(/\\\\gamma/g, 'γ')\n    .replace(/\\\\delta/g, 'δ').replace(/\\\\theta/g, 'θ').replace(/\\\\lambda/g, 'λ')\n    .replace(/\\\\mu/g, 'μ').replace(/\\\\sigma/g, 'σ').replace(/\\\\pi/g, 'π')\n    // 排版指令 \\mathrm{...} / \\text{...} 等 → 只留內容\n    .replace(/\\\\(?:mathrm|text|mathbf|mathit|mathbb|mathcal|operatorname)\\{([^{}]*)\\}/g, '$1')\n    // 上標 ^{...} → ^x；下標 _{...} → _x\n    .replace(/\\^\\{([^{}]*)\\}/g, '^$1')\n    .replace(/_\\{([^{}]*)\\}/g, '_$1')\n    // 移除殘留：$ 符號、剩下的 \\命令\n    .replace(/\\$/g, '')\n    .replace(/\\\\[a-zA-Z]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// ── 5. 輸出 items：n8n 節點的回傳格式是 [{ json: {...} }, ...] ──\nreturn raw.map(e => ({\n  json: {\n    title: cleanLatex(pick(e, 'title')),\n    summary: cleanLatex(pick(e, 'summary')),\n    link: pick(e, 'id'),\n    published: pick(e, 'published'),\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -496
+      ],
+      "id": "47d0d99e-af58-47b3-ad47-0fc61acc4943",
+      "name": "Parse arXiv XML"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 把 20 篇論文合成「候選清單」給 AI Agent（附 arXiv ID 讓它呼叫工具）──\nconst items = $input.all();\n\nconst list = items.map((it, i) => {\n  const d = it.json;\n  // 從 link 抽出 arXiv ID（http://arxiv.org/abs/2609.12345v1 → 2609.12345）\n  const m = (d.link || '').match(/abs\\/([^v]+)/);\n  return (i + 1) + '. ' + d.title + ' (ID: ' + (m ? m[1] : '?') + ')';\n});\n\nconst today = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' });\n\nconst prompt = '今天的日期：' + today\n  + '\\n\\n以下是今日 arXiv 的 AI 論文候選清單（共 ' + items.length + ' 篇）：\\n\\n'\n  + list.join('\\n');\n\nreturn [{ json: { prompt: prompt, count: items.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -496
+      ],
+      "id": "74056eb5-4042-4ee9-8ade-cad866e6587c",
+      "name": "Build Prompt"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "你是 AI 領域的技術情報分析師，為忙碌的研究者做每日精選。\n\n任務：\n1. 從候選清單中挑出最值得關注的 3 篇（考量：方法創新性、實用價值、熱門方向）\n2. 對你挑選的每篇，使用 get_arxiv_abstract 工具（傳入清單中的 ID）取得摘要\n3. 為每篇產出中文重點、重要度評分、主題標籤\n\n輸出格式（嚴格遵守，不要加其他文字）：\n【第1篇】\n標題：(原文標題)\n重點：(30 字以內中文重點)\n評分：(1/2/3/4/5)\n標籤：(標籤)\n連結：https://arxiv.org/abs/(ID)",
+          "maxIterations": 5,
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        736,
+        -496
+      ],
+      "id": "839a1b96-3bd7-44f4-bf2d-91ee08988581",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        736,
+        -256
+      ],
+      "id": "c0db62ad-3afb-415e-9ceb-da53498fe70e",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "FUFzmblR0wfpdI3u",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetches the full abstract of an arXiv paper. Input: the arXiv ID (e.g. 2609.12345). Use this when you need the detailed content of a paper you are considering featuring.",
+        "url": "=https://export.arxiv.org/api/query?id_list={{ $fromAI('arxiv_id', 'The arXiv paper ID, e.g. 2609.12345') }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        -240
+      ],
+      "id": "9b790264-9458-4acd-9bca-8e31f0c47561",
+      "name": "get_arxiv_abstract"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 把 AI Agent 的策展輸出組成 Telegram 訊息（含防護）──\nconst out = $input.first().json.output || '';\n\n// 防護：確認真的拿到條目（AI 偶爾會回廢話）\nconst count = (out.match(/【第\\s*\\d+\\s*篇】/g) || []).length;\n\nconst today = new Date().toLocaleDateString('zh-TW', {\n  timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'\n});\n\nlet message;\nif (count === 0) {\n  message = '⚠️ 今日情報產生異常（AI 未回傳有效內容）\\n\\n原始輸出：\\n' + out.slice(0, 500);\n} else {\n  message = '🤖 每日 AI 情報 · ' + today + '（AI Agent 精選 ' + count + ' 篇）\\n\\n' + out;\n}\n\nreturn [{ json: { message: message, count: count } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        -496
+      ],
+      "id": "d9130b91-65a5-425e-868a-195c014452f0",
+      "name": "Format"
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.link }}",
+        "options": {
+          "scope": "node",
+          "historySize": 10000
+        }
+      },
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -496
+      ],
+      "id": "da093d51-87ea-41a3-8f80-5199d6f5451a",
+      "name": "Remove Duplicates"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse arXiv XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Parse arXiv XML": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_arxiv_abstract": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "31a3e5b7-cff9-40ae-bcda-2f62191d28e7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fab04b8b26d16d1175a5a6e6a69d17860baf854b902b3031204f0013e8201e2a"
+  },
+  "nodeGroups": [],
+  "id": "71EBiIPkh7gBZoJt",
+  "tags": []
+}
