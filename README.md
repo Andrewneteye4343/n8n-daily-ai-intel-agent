@@ -95,11 +95,11 @@ pending  ──[ 人工核准 ]──►  approved  ──►  sent
 
 | Telegram 精選簡報 | AI Agent 決策軌跡 |
 |---|---|
-| ![briefing](docs/screenshots/telegram-briefing.png) | ![agent](docs/screenshots/agent-steps.png) |
+| ![briefing](docs/screenshots/telegram-briefing.jpg) | ![agent](docs/screenshots/agent-steps.jpg) |
 
 | 待核准佇列 | Workflow 畫布 |
 |---|---|
-| ![queue](docs/screenshots/approval-queue.png) | ![canvas](docs/screenshots/workflow-a.png) |
+| ![queue](docs/screenshots/approval-queue.jpg) | ![canvas](docs/screenshots/workflow-a.jpg) |
 
 ---
 
