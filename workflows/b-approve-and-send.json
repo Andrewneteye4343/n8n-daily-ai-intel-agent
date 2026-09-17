@@ -1,0 +1,253 @@
+{
+  "name": "B - Approve & Send",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6e480abe-6647-42f0-9867-5d440bd1a624",
+      "name": "Manual Approve"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "kUiBXNFgqcIux4bW",
+          "mode": "list",
+          "cachedResultName": "daily_ai_papers",
+          "cachedResultUrl": "/projects/u39h4c9hKLkuPpxU/datatables/kUiBXNFgqcIux4bW"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "approved"
+            }
+          ]
+        },
+        "orderBy": true,
+        "orderByColumn": "score"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3cc3600c-4d62-48b1-974e-1d8127772a08",
+      "name": "Get Approved"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── 把「已核准」的論文組成 Telegram 訊息 ──\nconst rows = $input.all().map(it => it.json);\n\nconst today = new Date().toLocaleDateString('zh-TW', {\n  timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'\n});\n\nconst lines = rows.map((r, i) =>\n  (i + 1) + '. [' + r.score + '★] ' + r.title + '\\n' + r.summary + '\\n' + r.link\n);\n\nconst message = '✅ 人工核准推播 · ' + today + '（' + rows.length + ' 篇）\\n\\n'\n  + lines.join('\\n\\n');\n\nreturn [{ json: { message: message, count: rows.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "3ac8a453-3162-4ad9-a6d8-bee25fe3ac62",
+      "name": "Build Message"
+    },
+    {
+      "parameters": {
+        "chatId": "8805343990",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "7dc4c5e6-b489-4bc6-b1f4-1d66d5192b24",
+      "name": "Send Briefing",
+      "webhookId": "43ed1dbf-ad41-471f-b9e2-192ac0867737",
+      "credentials": {
+        "telegramApi": {
+          "id": "0BWIojDDa9gPLuUA",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "kUiBXNFgqcIux4bW",
+          "mode": "list",
+          "cachedResultName": "daily_ai_papers",
+          "cachedResultUrl": "/projects/u39h4c9hKLkuPpxU/datatables/kUiBXNFgqcIux4bW"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "approved"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "tag",
+              "displayName": "tag",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        0
+      ],
+      "id": "a729c626-e45b-4b4b-a548-d190e8a9abe8",
+      "name": "Mark Sent"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Approve": {
+      "main": [
+        [
+          {
+            "node": "Get Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Approved": {
+      "main": [
+        [
+          {
+            "node": "Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Message": {
+      "main": [
+        [
+          {
+            "node": "Send Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Briefing": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ee2484c5-ebc8-4dfc-ab21-4c73e183312e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fab04b8b26d16d1175a5a6e6a69d17860baf854b902b3031204f0013e8201e2a"
+  },
+  "nodeGroups": [],
+  "id": "owte7KE5GEWi8Sf8",
+  "tags": []
+}
