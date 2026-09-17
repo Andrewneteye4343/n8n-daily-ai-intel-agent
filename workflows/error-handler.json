@@ -10,7 +10,7 @@
         -64
       ],
       "id": "4d7c8612-aa36-4cdc-8e1c-1b37f9074a37",
-      "name": "Error Handler"
+      "name": "On Workflow Error"
     },
     {
       "parameters": {
@@ -23,7 +23,7 @@
         -64
       ],
       "id": "c76eda62-ed1f-485e-bcdf-ad8e33750786",
-      "name": "Code in JavaScript"
+      "name": "Format Alert"
     },
     {
       "parameters": {
@@ -40,7 +40,7 @@
         -64
       ],
       "id": "0992b4a8-7cf1-48e6-a875-9b685041058d",
-      "name": "Send a text message",
+      "name": "Send Alert",
       "webhookId": "acb885c8-a3bc-4123-a87c-71a5909f2ef1",
       "credentials": {
         "telegramApi": {
@@ -52,22 +52,22 @@
   ],
   "pinData": {},
   "connections": {
-    "Error Handler": {
+    "On Workflow Error": {
       "main": [
         [
           {
-            "node": "Code in JavaScript",
+            "node": "Format Alert",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code in JavaScript": {
+    "Format Alert": {
       "main": [
         [
           {
-            "node": "Send a text message",
+            "node": "Send Alert",
             "type": "main",
             "index": 0
           }
@@ -80,7 +80,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "57aa11ac-f5fd-493e-827d-85ad039d73e7",
+  "versionId": "af55cf2a-7d56-49d0-95e5-b81ae2661d4c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fab04b8b26d16d1175a5a6e6a69d17860baf854b902b3031204f0013e8201e2a"
