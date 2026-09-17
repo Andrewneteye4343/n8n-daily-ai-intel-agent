@@ -1,5 +1,5 @@
 {
-  "name": "03 - Telegram Notify",
+  "name": "04-llm-scoring",
   "nodes": [
     {
       "parameters": {

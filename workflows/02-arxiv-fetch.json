@@ -1,5 +1,5 @@
 {
-  "name": "My workflow",
+  "name": "02-arxiv-fetch",
   "nodes": [
     {
       "parameters": {},
